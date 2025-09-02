@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Weather App (No API Key)</title>
+  <style>
+    :root { --card:#111827; --text:#f9fafb; --muted:#9ca3af; --accent:#60a5fa; }
+    *{box-sizing:border-box} body{
+      margin:0; font-family:system-ui, Arial; background:linear-gradient(135deg,#4f46e5,#06b6d4);
+      min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+    }
+    .app{
+      width:min(720px,100%); background:#0b1220ee; backdrop-filter: blur(6px);
+      color:var(--text); border-radius:16px; box-shadow:0 20px 50px rgba(0,0,0,.35);
+      padding:22px;
+    }
+    h1{margin:0 0 10px; font-size:24px}
+    .top{display:flex; gap:10px; flex-wrap:wrap}
+    input{
+      flex:1; padding:12px 14px; border-radius:10px; border:1px solid #1f2937; background:#0f172a; color:var(--text);
+      outline:none;
+    }
+    button{
+      padding:12px 14px; border:none; border-radius:10px; background:var(--accent); color:#0b1220; font-weight:600; cursor:pointer;
+    }
+    .row{display:flex; gap:14px; align-items:center; justify-content:space-between; margin-top:14px; flex-wrap:wrap}
+    .switch{display:flex; gap:8px; align-items:center; color:var(--muted); font-size:14px}
+    .card{
+      margin-top:16px; background:var(--card); border:1px solid #1f2937; border-radius:14px; padding:16px;
+    }
+    .current{display:flex; align-items:center; gap:18px; flex-wrap:wrap}
+    .temp{font-size:48px; font-weight:700}
+    .meta{color:var(--muted); font-size:14px}
+    .grid{display:grid; grid-template-columns: repeat(3, 1fr); gap:10px; margin-top:14px}
+    .mini{
+      background:#0f172a; border:1px solid #1f2937; border-radius:12px; padding:12px; text-align:center
+    }
+    .mini h4{margin:0 0 6px; font-size:14px}
+    .mini .t{font-size:18px; font-weight:700}
+    .err{margin-top:10px; color:#fecaca; background:#7f1d1d; padding:10px; border-radius:8px; display:none}
+    .muted{color:var(--muted); font-size:13px}
+    .icon{font-size:42px; line-height:1}
+    .loader{display:none; font-size:13px; color:var(--muted)}
+    a{color:#93c5fd; text-decoration:none}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>🌤️ Weather</h1>
+    <div class="top">
+      <input id="city" placeholder="Enter city e.g. Karachi, Lahore, London..." />
+      <button id="searchBtn">Search</button>
+      <button id="locBtn">Use My Location</button>
+    </div>
+
+    <div class="row">
+      <div class="switch">
+        <label><input type="checkbox" id="unitToggle"> Show °F</label>
+      </div>
+      <div class="loader" id="loader">Fetching latest weather…</div>
+    </div>
+
+    <div class="err" id="error"></div>
+
+    <div class="card" id="currentCard" style="display:none">
+      <div class="current">
+        <div class="icon" id="iconNow">⛅</div>
+        <div>
+          <div class="temp" id="tempNow">--°</div>
+          <div id="descNow" class="meta">—</div>
+          <div id="placeNow" class="meta">—</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <div class="muted" id="extraNow">Wind — • Humidity — • Feels —</div>
+        <div class="muted" id="timeNow">—</div>
+      </div>
+    </div>
+
+    <div class="card" id="forecastCard" style="display:none">
+      <div class="muted" style="margin-bottom:8px">3-Day Forecast</div>
+      <div class="grid" id="forecastGrid"></div>
+    </div>
+
+    <p class="muted" style="margin-top:12px">
+      Data by Open-Meteo (no API key). Accuracy varies by region.
+    </p>
+  </div>
+
+  <script>
+    // --- Helpers ---
+    const $ = (id) => document.getElementById(id);
+    const loader = $("loader"), err = $("error");
+    const unitToggle = $("unitToggle");
+    let useF = false;
+
+    // Open-Meteo weathercode → description + emoji
+    const WMAP = {
+      0:["Clear sky","☀️"], 1:["Mainly clear","🌤️"], 2:["Partly cloudy","⛅"], 3:["Overcast","☁️"],
+      45:["Fog","🌫️"], 48:["Depositing rime fog","🌫️"],
+      51:["Drizzle: light","🌦️"], 53:["Drizzle: moderate","🌦️"], 55:["Drizzle: dense","🌦️"],
+      56:["Freezing drizzle: light","🌧️"], 57:["Freezing drizzle: dense","🌧️"],
+      61:["Rain: slight","🌧️"], 63:["Rain: moderate","🌧️"], 65:["Rain: heavy","🌧️"],
+      66:["Freezing rain: light","🌧️"], 67:["Freezing rain: heavy","🌧️"],
+      71:["Snow fall: slight","🌨️"], 73:["Snow fall: moderate","🌨️"], 75:["Snow fall: heavy","🌨️"],
+      77:["Snow grains","🌨️"],
+      80:["Rain showers: slight","🌦️"], 81:["Rain showers: moderate","🌦️"], 82:["Rain showers: violent","🌧️"],
+      85:["Snow showers: slight","🌨️"], 86:["Snow showers: heavy","🌨️"],
+      95:["Thunderstorm: slight/moderate","⛈️"], 96:["Thunderstorm with slight hail","⛈️"], 99:["Thunderstorm with heavy hail","⛈️"]
+    };
+
+    const cToF = c => (c * 9/5) + 32;
+    const fmtTemp = c => (useF ? Math.round(cToF(c)) : Math.round(c)) + "°" + (useF ? "F":"C");
+    const kmhToMph = k => (useF ? (k/1.609).toFixed(0)+" mph" : k.toFixed(0)+" km/h");
+
+    unitToggle.addEventListener("change", () => {
+      useF = unitToggle.checked;
+      if (window._lastWeather) renderWeather(window._lastWeather);
+    });
+
+    // --- Core fetchers (no key needed) ---
+    async function geocodeCity(q){
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=en&format=json`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error("Geocoding failed");
+      const data = await res.json();
+      if(!data.results || !data.results.length) throw new Error("City not found");
+      const r = data.results[0];
+      return {lat:r.latitude, lon:r.longitude, name:`${r.name}${r.admin1? ", "+r.admin1:""}${r.country? ", "+r.country:""}`};
+    }
+
+    async function getWeather(lat, lon){
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`;
+      const res = await fetch(url);
+      if(!res.ok) throw new Error("Weather fetch failed");
+      return res.json();
+    }
+
+    // --- UI actions ---
+    $("searchBtn").addEventListener("click", () => searchCity());
+    $("city").addEventListener("keydown", e => { if(e.key==="Enter") searchCity(); });
+    $("locBtn").addEventListener("click", () => {
+      if(!navigator.geolocation) return showError("Geolocation not supported in your browser.");
+      setLoading(true);
+      navigator.geolocation.getCurrentPosition(async pos=>{
+        try{
+          const {latitude:lat, longitude:lon} = pos.coords;
+          const wx = await getWeather(lat, lon);
+          const place = `Your Location (${lat.toFixed(2)}, ${lon.toFixed(2)})`;
+          setLoading(false);
+          handleWeather(wx, place);
+        }catch(e){ setLoading(false); showError(e.message); }
+      }, errObj=>{
+        setLoading(false);
+        showError("Location permission denied or unavailable.");
+      }, {enableHighAccuracy:false, timeout:10000});
+    });
+
+    async function searchCity(){
+      const q = $("city").value.trim();
+      if(!q) return showError("Please enter a city name.");
+      try{
+        setLoading(true);
+        const g = await geocodeCity(q);
+        const wx = await getWeather(g.lat, g.lon);
+        setLoading(false);
+        handleWeather(wx, g.name);
+      }catch(e){
+        setLoading(false); showError(e.message || "Something went wrong.");
+      }
+    }
+
+    function setLoading(v){
+      loader.style.display = v ? "block" : "none";
+      err.style.display = "none";
+    }
+    function showError(msg){
+      err.textContent = "⚠️ " + msg;
+      err.style.display = "block";
+    }
+
+    function handleWeather(data, placeLabel){
+      window._lastWeather = {data, placeLabel};
+      renderWeather(window._lastWeather);
+    }
+
+    function renderWeather({data, placeLabel}){
+      // Current
+      const cur = data.current;
+      const [desc, emoji] = WMAP[cur.weather_code] || ["Unknown","❔"];
+      $("iconNow").textContent = emoji;
+      $("tempNow").textContent = fmtTemp(cur.temperature_2m);
+      $("descNow").textContent = desc;
+      $("placeNow").textContent = placeLabel;
+      $("extraNow").textContent = `Wind ${kmhToMph(cur.wind_speed_10m)} • Humidity ${cur.relative_humidity_2m}% • Feels ${fmtTemp(cur.apparent_temperature)}`;
+      $("timeNow").textContent = `Updated: ${new Date().toLocaleString()}`;
+      $("currentCard").style.display = "block";
+
+      // Forecast (next 3 days)
+      const d = data.daily;
+      const grid = $("forecastGrid");
+      grid.innerHTML = "";
+      for(let i=0;i<Math.min(3, d.time.length);i++){
+        const code = d.weather_code[i];
+        const [dDesc, dEmoji] = WMAP[code] || ["—","❔"];
+        const day = new Date(d.time[i]).toLocaleDateString(undefined, {weekday:"short", month:"short", day:"numeric"});
+        const el = document.createElement("div");
+        el.className = "mini";
+        el.innerHTML = `
+          <h4>${day}</h4>
+          <div style="font-size:28px">${dEmoji}</div>
+          <div class="t">${fmtTemp(d.temperature_2m_max[i])} / ${fmtTemp(d.temperature_2m_min[i])}</div>
+          <div class="muted" style="margin-top:4px">${dDesc}</div>
+        `;
+        grid.appendChild(el);
+      }
+      $("forecastCard").style.display = "block";
+    }
+
+    // Optional: load a default city first time
+    (function init(){
+      $("city").value = "Karachi";
+      searchCity();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quiz Game</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #4facfe, #00f2fe);
+      font-family: Arial, sans-serif;
+    }
+    .quiz-box {
+      background: white;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+      width: 400px;
+      text-align: center;
+    }
+    h2 {
+      margin-bottom: 20px;
+    }
+    .option {
+      display: block;
+      background: #f1f1f1;
+      margin: 8px 0;
+      padding: 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    .option:hover {
+      background: #ddd;
+    }
+    #next-btn {
+      margin-top: 15px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background: #4CAF50;
+      color: white;
+      cursor: pointer;
+      display: none;
+    }
+    #next-btn:hover {
+      background: #388E3C;
+    }
+  </style>
+</head>
+<body>
+  <div class="quiz-box">
+    <h2 id="question">Question comes here</h2>
+    <div id="options"></div>
+    <button id="next-btn" onclick="nextQuestion()">Next</button>
+  </div>
+
+  <script>
+    const quizData = [
+      {
+        question: "Which language is used for web apps?",
+        options: ["Python", "JavaScript", "C++", "Java"],
+        answer: "JavaScript"
+      },
+      {
+        question: "Which tag is used for a hyperlink in HTML?",
+        options: ["<p>", "<a>", "<h1>", "<div>"],
+        answer: "<a>"
+      },
+      {
+        question: "CSS stands for?",
+        options: ["Cascading Style Sheets", "Creative Style System", "Computer Styled Section", "Colorful Style Syntax"],
+        answer: "Cascading Style Sheets"
+      }
+    ];
+
+    let currentQuestion = 0;
+    let score = 0;
+
+    function loadQuestion() {
+      document.getElementById("next-btn").style.display = "none";
+      const q = quizData[currentQuestion];
+      document.getElementById("question").textContent = q.question;
+
+      let optionsDiv = document.getElementById("options");
+      optionsDiv.innerHTML = "";
+
+      q.options.forEach(opt => {
+        let btn = document.createElement("div");
+        btn.textContent = opt;
+        btn.className = "option";
+        btn.onclick = () => checkAnswer(btn, q.answer);
+        optionsDiv.appendChild(btn);
+      });
+    }
+
+    function checkAnswer(selected, correct) {
+      let options = document.querySelectorAll(".option");
+      options.forEach(btn => {
+        btn.style.pointerEvents = "none"; // disable clicks
+        if (btn.textContent === correct) {
+          btn.style.background = "#4CAF50"; // green for correct
+          btn.style.color = "white";
+        }
+        if (btn === selected && btn.textContent !== correct) {
+          btn.style.background = "#f44336"; // red for wrong
+          btn.style.color = "white";
+        }
+      });
+      if (selected.textContent === correct) {
+        score++;
+      }
+      document.getElementById("next-btn").style.display = "block";
+    }
+
+    function nextQuestion() {
+      currentQuestion++;
+      if (currentQuestion < quizData.length) {
+        loadQuestion();
+      } else {
+        document.querySelector(".quiz-box").innerHTML = 
+          `<h2>🎉 Quiz Finished!</h2>
+           <p>Your Score: ${score} / ${quizData.length}</p>`;
+      }
+    }
+
+    loadQuestion();
+  </script>
+</body>
+</html>
